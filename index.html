@@ -214,7 +214,7 @@ footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
         <div id="shop-msg" class="warn hidden" role="status"></div>
         <div class="two">
           <div class="f" id="w-qty"><label for="o-qty">Quantity</label><input id="o-qty" class="field" type="number" min="1" max="10" value="1"><div class="err"></div></div>
-          <div class="f" id="w-cc"><label for="o-cc">Company code</label><input id="o-cc" class="field" type="text" maxlength="4" placeholder="e.g. ABCD" style="text-transform:uppercase"><div class="err"></div></div>
+          <div class="f" id="w-cc"><label for="o-cc">Company code <small>(optional)</small></label><input id="o-cc" class="field" type="text" maxlength="4" placeholder="e.g. ABCD" style="text-transform:uppercase"><div class="err"></div></div>
         </div>
         <div class="f" id="w-name"><label for="o-name">In-game name</label><input id="o-name" class="field" type="text" maxlength="40"><div class="err"></div></div>
         <div class="f" id="w-dc"><label for="o-dc">Discord username</label><input id="o-dc" class="field" type="text" maxlength="40" placeholder="name or name#1234"><div class="err"></div></div>
@@ -628,7 +628,7 @@ function validate() {
   var n = parseInt($('o-qty').value, 10);
   var cc = $('o-cc').value.trim().toUpperCase();
   [['w-qty', isNaN(n) || n < 1 || n > MAX_QTY ? 'Quantity must be 1 to ' + MAX_QTY + '.' : ''],
-   ['w-cc', /^[A-Z0-9]{1,4}$/.test(cc) ? '' : 'Company code: 1 to 4 letters or digits.'],
+   ['w-cc', /^[A-Z0-9]{0,4}$/.test(cc) ? '' : 'Company code: up to 4 letters or digits.'],
    ['w-name', $('o-name').value.trim() ? '' : 'Required.'],
    ['w-dc', $('o-dc').value.trim().length >= 2 ? '' : 'Required - we confirm orders on Discord.'],
    ['w-to', $('o-to').value.trim() ? '' : 'Required.']
