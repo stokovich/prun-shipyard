@@ -99,6 +99,34 @@ tfoot td { background: transparent; border-bottom: 0; color: var(--text-hi); fon
 .send-err:empty { display: none; }
 .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
+
+/* My orders (само при SHOP_URL) */
+.view-my { padding-top: 16px; padding-bottom: 32px; }
+.mono { font: 500 13px 'Noto Sans Mono', monospace; color: var(--text-hi); letter-spacing: .04em; }
+.keyrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.keyrow .field { flex: 1 1 220px; min-width: 0; }
+.btn-sm { height: 40px; padding: 0 16px; }
+.brk { word-break: break-all; }
+#my-rows td { white-space: nowrap; }
+/* на телефон - поръчката като карта: етикет вляво, стойност вдясно (статусът се вижда без плъзгане) */
+@media (max-width: 600px) {
+  #my-tbl thead { display: none; }
+  #my-tbl tr { display: block; margin-bottom: 10px; border: 1px solid #2f2f2f; }
+  #my-rows td { display: flex; justify-content: space-between; gap: 12px; white-space: normal; text-align: right; }
+  #my-rows td::before { content: attr(data-l); color: var(--label); text-align: left; white-space: nowrap; }
+}
+.status.st-ok { border-color: #3d7a3d; color: #9fd49f; }
+.status.st-off { border-color: #555; color: var(--text-lo); }
+
+/* екранът „изпраща се“: покрива всичко, отдолу нищо не се натиска */
+.overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(10,10,10,.75); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.overlay-box { background: var(--panel); border: 1px solid var(--head-line); padding: 28px 24px; max-width: 380px; width: 100%;
+  display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.overlay-box:focus { outline: none; }
+.overlay-h { font-size: 16px; font-weight: 700; color: var(--text-hi); }
+.spinner { width: 44px; height: 44px; border: 3px solid rgba(247,166,0,.2); border-top-color: var(--accent); border-radius: 50%; animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
 </style>
 </head>
 <body>
@@ -118,6 +146,7 @@ footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
       <a href="#configure" class="on">Configure</a>
       <a href="#order">Order</a>
       <a href="#sheet" id="nav-sheet">Orders sheet</a>
+      <a href="#myorders" id="nav-my" class="hidden">My orders</a>
     </nav>
   </div>
 </header>
@@ -201,11 +230,60 @@ footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
         <div id="d-line"></div>
         <div id="d-total" style="color:var(--text-hi)"></div>
         <div class="note" style="font-size:12px">We will message you on Discord to confirm price and delivery date.</div>
+        <div id="d-key" class="form hidden" style="gap:6px;border-top:1px solid var(--rule);padding-top:12px">
+          <div>Your customer key: <span class="mono" id="d-keyv"></span></div>
+          <div class="note" style="font-size:12px">With your personal link you can see your orders from another device - keep it to yourself:</div>
+          <a id="d-link" class="brk" href="#"></a>
+          <button type="button" class="btn btn-alt btn-sm" id="d-copy">Copy link</button>
+        </div>
         <button type="button" class="btn btn-alt" id="d-again">Configure another ship</button>
       </div>
     </section>
   </aside>
 </main>
+
+<div id="view-my" class="wrap view-my hidden">
+  <section id="myorders" class="panel" aria-labelledby="my-h">
+    <h2 id="my-h"><span>My orders</span><span class="h2-side"><button type="button" class="btn-reset hidden" id="my-refresh">Refresh</button></span></h2>
+    <div class="body">
+      <div id="my-nokey" class="form">
+        <div>No orders from this browser yet.</div>
+        <form id="my-keyform" class="f" novalidate>
+          <label for="my-keyin">Have a customer key from an earlier order? Enter it to see your orders.</label>
+          <div class="keyrow">
+            <input id="my-keyin" class="field mono" type="text" maxlength="20" placeholder="XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" style="text-transform:uppercase">
+            <button type="submit" class="btn btn-alt btn-sm">Show</button>
+          </div>
+          <div class="err" id="my-keyerr" role="alert"></div>
+        </form>
+      </div>
+      <div id="my-haskey" class="form hidden">
+        <div>Your customer key: <span class="mono" id="my-key"></span></div>
+        <div class="f">
+          <label for="my-link">Personal link</label>
+          <div class="keyrow"><input id="my-link" class="field" type="text" readonly><button type="button" class="btn btn-alt btn-sm" id="my-copy">Copy link</button></div>
+          <div class="note">Open this link on another device to see your orders there. Keep it to yourself - anyone with the link can see your orders.</div>
+        </div>
+        <div id="my-state" role="status"></div>
+        <div id="my-err" class="errbox hidden" role="alert"></div>
+        <div class="tbl-box hidden" id="my-tbl">
+          <table>
+            <thead><tr><th scope="col">Order</th><th scope="col">Date</th><th scope="col">Ship</th><th scope="col" class="num">Qty</th><th scope="col" class="num">Price per ship</th><th scope="col" class="num">Total</th><th scope="col">Status</th></tr></thead>
+            <tbody id="my-rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="sending" class="overlay hidden" role="alertdialog" aria-modal="true" aria-labelledby="sending-h" aria-describedby="sending-d">
+  <div class="overlay-box" id="sending-box" tabindex="-1">
+    <div class="spinner" aria-hidden="true"></div>
+    <div class="overlay-h" id="sending-h">Sending your order…</div>
+    <div id="sending-d">This usually takes 5-20 seconds. Please don't close or reload the page.</div>
+  </div>
+</div>
 
 <footer class="wrap">PrUn Shipyard · parts list follows the in-game blueprint rules (checked against 893 blueprints) · prices: CP MOR.</footer>
 
@@ -338,6 +416,12 @@ var LEAD_WEEKS = SHOP_URL ? null : hashNum('lead');
 var shop = SHOP_URL ? { state: 'loading', message: '' } : null; // state: loading | ok | closed | error
 var formOpened = Date.now(); // за капана „твърде бързо попълване“ в скрипта
 var sending = false;
+var SEND_TIMEOUT_MS = 60000;  // без отговор дотогава - грешка; поръчката може да е записана, затова „Check My orders“
+// личният ключ на клиента (само при SHOP_URL): издава го скриптът при първата поръчка; пази се в браузъра,
+// личният линк #key=... го пренася на друго устройство. Адресът на магазина НЕ се взема от адреса на страницата.
+var KEY_STORE = 'psy.customerKey';
+var KEY_RE = /^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{12}$/;
+var customerKey = null;
 
 var NAMES = {
   ENG: 'Standard STL engine', FSE: 'Fuel-saving STL engine', GEN: 'Glass STL engine', AEN: 'Advanced STL engine', HTE: 'Hyperthrust STL engine',
@@ -497,9 +581,10 @@ function loadConfig() {
 }
 
 // през <script> (JSONP), не fetch: така работи и отворено като файл (file://), където Google не дава CORS
+var jsonpSeq = 0;
 function jsonp(srcFor, prefix) {
   return new Promise(function (resolve, reject) {
-    var cb = prefix + Date.now();
+    var cb = prefix + Date.now() + '_' + (++jsonpSeq);
     var s = document.createElement('script');
     var timer = setTimeout(function () { done(); reject(new Error('timeout')); }, 15000);
     function done() { clearTimeout(timer); delete window[cb]; s.remove(); }
@@ -576,27 +661,194 @@ function sendToShop(ship) {
     dc: $('o-dc').value.trim(), to: $('o-to').value.trim(), notes: $('o-notes').value.trim(),
     hp: $('o-web').value, ms: Date.now() - formOpened
   };
+  if (customerKey) payload.key = showKey(customerKey);
   sending = true;
   $('o-err').textContent = '';
   $('o-send').textContent = 'Sending...';
+  showSending(true);
   render();
-  fetch(SHOP_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) })
-    .then(function (r) { return r.json(); })
+  var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+  var timer = null, timedOut = false;
+  var timeout = new Promise(function (resolve, reject) {
+    timer = setTimeout(function () { timedOut = true; if (ctrl) ctrl.abort(); reject(new Error('timeout')); }, SEND_TIMEOUT_MS);
+  });
+  var opts = { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) };
+  if (ctrl) opts.signal = ctrl.signal;
+  var ok = false;
+  Promise.race([fetch(SHOP_URL, opts).then(function (r) { return r.json(); }), timeout])
     .then(function (res) {
       if (!res || res.ok !== true) throw new Error((res && res.error) || 'The order was not accepted.');
+      var k = normKey(res.customerKey);
+      if (k) setKey(k);
+      ok = true;
       showDone('Order ' + res.orderId + ' received', qty + ' × ' + ship,
         fmt(res.total) + ' NCC' + (typeof res.leadWeeks === 'number' ? ' · delivery in ' + weeks(res.leadWeeks) : ''));
+      showDoneKey(k);
+      loadMyOrders();
     })
     .catch(function (err) {
-      $('o-err').textContent = err instanceof TypeError || err instanceof SyntaxError
-        ? 'Could not reach the shop - please try again or contact us on Discord.' : String(err.message || err);
+      // без отговор поръчката може вече да е записана: с ключ - My orders показва дали е; без ключ (първа поръчка)
+      // клиентът не може да провери сам - затова не „опитай пак“, а Discord
+      var unsure = customerKey ? ' Check My orders before sending it again.'
+        : ' It may still have arrived - please contact us on Discord before sending it again.';
+      $('o-err').textContent = timedOut ? 'No answer from the shop.' + unsure :
+        err instanceof TypeError || err instanceof SyntaxError
+        ? 'Could not reach the shop.' + unsure : String(err.message || err);
     })
     .then(function () {
+      clearTimeout(timer);
       sending = false;
+      showSending(false);
       $('o-send').textContent = 'Send order';
       render();
+      if (ok) $('d-again').focus(); else $('o-send').focus();
     });
 }
+
+// екранът „изпраща се“: покритието и inert отдолу (и клавиатурата не стига до формуляра)
+function showSending(on) {
+  $('sending').classList.toggle('hidden', !on);
+  ['header', 'main', 'footer', '#view-my'].forEach(function (q) {
+    var el = document.querySelector(q);
+    if (!el) return;
+    el.inert = on;
+    if (on) el.setAttribute('inert', ''); else el.removeAttribute('inert');
+  });
+  if (on) $('sending-box').focus();
+}
+window.addEventListener('beforeunload', function (e) {
+  if (sending) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// ---------------------------------------------------------------- личният ключ и My orders
+
+function normKey(v) {
+  var k = String(v == null ? '' : v).replace(/[\s-]/g, '').toUpperCase();
+  return KEY_RE.test(k) ? k : null;
+}
+function showKey(k) { return k.slice(0, 4) + '-' + k.slice(4, 8) + '-' + k.slice(8); }
+function personalLink(k) { return location.href.split('#')[0] + '#key=' + showKey(k); }
+function loadKey() {
+  try { customerKey = normKey(localStorage.getItem(KEY_STORE)); } catch (e) { customerKey = null; }
+}
+// пази и в паметта: без localStorage (частен прозорец) ключът важи до затваряне на страницата
+function setKey(k) {
+  customerKey = k;
+  try { localStorage.setItem(KEY_STORE, showKey(k)); } catch (e) { /* без localStorage */ }
+}
+
+function showDoneKey(k) {
+  $('d-key').classList.toggle('hidden', !k);
+  if (!k) return;
+  $('d-keyv').textContent = showKey(k);
+  $('d-link').textContent = $('d-link').href = personalLink(k);
+}
+
+function copyText(text, btn) {
+  var said = function () {
+    var was = btn.dataset.label || btn.textContent;
+    btn.dataset.label = was;
+    btn.textContent = 'Copied';
+    setTimeout(function () { btn.textContent = was; }, 1500);
+  };
+  var fallback = function () {
+    var t = document.createElement('textarea');
+    t.value = text; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+    document.body.appendChild(t); t.select();
+    try { document.execCommand('copy'); said(); } catch (e) { /* няма как - линкът се вижда на екрана */ }
+    t.remove();
+  };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(said, fallback);
+  else fallback();
+}
+
+var myReq = 0;
+function renderMyKey() {
+  $('my-nokey').classList.toggle('hidden', !!customerKey);
+  $('my-haskey').classList.toggle('hidden', !customerKey);
+  $('my-refresh').classList.toggle('hidden', !customerKey);
+  if (customerKey) {
+    $('my-key').textContent = showKey(customerKey);
+    $('my-link').value = personalLink(customerKey);
+  }
+}
+
+function myDate(iso) {
+  var d = iso ? new Date(iso) : null;
+  return d && !isNaN(d) ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+}
+
+function loadMyOrders() {
+  renderMyKey();
+  if (!customerKey) return;
+  var id = ++myReq;
+  $('my-state').textContent = 'Loading…';
+  $('my-state').className = 'note';
+  $('my-err').classList.add('hidden');
+  var sep = SHOP_URL.indexOf('?') < 0 ? '?' : '&';
+  var key = showKey(customerKey);
+  jsonp(function (cb) { return SHOP_URL + sep + 'action=orders&key=' + encodeURIComponent(key) + '&callback=' + cb; }, '__psyMy').then(function (res) {
+    if (id !== myReq) return;
+    if (!res || res.ok !== true || !Array.isArray(res.orders)) throw new Error((res && res.error) || 'unexpected answer');
+    var money = function (n) { return typeof n === 'number' ? fmt(n) + ' NCC' : '-'; };
+    $('my-rows').innerHTML = res.orders.map(function (o) {
+      var cls = /^Delivered$/.test(o.status) ? ' st-ok' : o.status === 'Cancelled' ? ' st-off' : '';
+      return '<tr><td data-l="Order">' + esc(o.orderId) + '</td><td data-l="Date">' + esc(myDate(o.time)) + '</td><td data-l="Ship">' +
+        esc(o.ship) + '</td><td class="num" data-l="Qty">' + (typeof o.qty === 'number' ? o.qty : '-') + '</td><td class="num" data-l="Price per ship">' +
+        money(o.pricePerShip) + '</td><td class="num" data-l="Total">' + money(o.total) + '</td><td data-l="Status"><span class="status' + cls + '">' +
+        esc(o.status) + '</span></td></tr>';
+    }).join('');
+    $('my-tbl').classList.toggle('hidden', !res.orders.length);
+    $('my-state').className = res.orders.length ? 'note' : 'empty';
+    $('my-state').textContent = res.orders.length
+      ? 'Updated ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' · statuses are updated by hand, so give us a little time.'
+      : 'No orders yet.';
+  }).catch(function (e) {
+    if (id !== myReq) return;
+    $('my-state').textContent = '';
+    $('my-err').textContent = 'Could not load your orders (' + String(e.message || e) + '). Try Refresh in a minute or contact us on Discord.';
+    $('my-err').classList.remove('hidden');
+  });
+}
+
+// раздели при SHOP_URL: #myorders - My orders; иначе конфигураторът (#configure / #order - до раздела)
+function route() {
+  var my = location.hash === '#myorders';
+  document.querySelector('main').classList.toggle('hidden', my);
+  $('view-my').classList.toggle('hidden', !my);
+  var on = my ? 'nav-my' : (location.hash === '#order' ? 'order' : 'configure');
+  document.querySelectorAll('nav a').forEach(function (a) {
+    a.classList.toggle('on', my ? a.id === 'nav-my' : a.getAttribute('href') === '#' + on);
+  });
+  if (my) { window.scrollTo(0, 0); loadMyOrders(); }
+  else if (location.hash === '#order' || location.hash === '#configure') { var el = $(location.hash.slice(1)); if (el) el.scrollIntoView(); }
+}
+
+// #key=XXXX-XXXX-XXXX (личният линк): проверява се, пази се и се маха от адреса; отваря My orders
+function takeKeyFromHash() {
+  var m = /(?:^|[#&])key=([^&]*)/.exec(location.hash);
+  if (!m) return;
+  var k = null;
+  try { k = normKey(decodeURIComponent(m[1])); } catch (e) { k = null; }
+  if (k) setKey(k);
+  try { history.replaceState(null, '', location.pathname + location.search + '#myorders'); } catch (e) { location.hash = 'myorders'; }
+  if (!k) { $('my-keyerr').textContent = 'The link has no valid customer key.'; }
+}
+
+$('my-keyform').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var k = normKey($('my-keyin').value);
+  $('my-keyerr').textContent = k ? '' : 'That is not a customer key - it looks like XXXX-XXXX-XXXX.';
+  if (!k) { $('my-keyin').focus(); return; }
+  setKey(k);
+  $('my-keyin').value = '';
+  loadMyOrders();
+});
+$('my-refresh').addEventListener('click', loadMyOrders);
+// вече на #myorders - hashchange няма, затова зарежда тук
+$('nav-my').addEventListener('click', function () { if (location.hash === '#myorders') loadMyOrders(); });
+$('my-copy').addEventListener('click', function () { if (customerKey) copyText(personalLink(customerKey), $('my-copy')); });
+$('d-copy').addEventListener('click', function () { if (customerKey) copyText(personalLink(customerKey), $('d-copy')); });
 
 // демото (без SHOP_URL): поръчката остава в страницата, в таблицата „Orders sheet“
 function keepInPage(ship) {
@@ -627,9 +879,15 @@ $('d-again').addEventListener('click', function () {
 $('o-qty').addEventListener('input', render);
 $('cfg-reset').addEventListener('click', resetForm);
 
-// с адрес на скрипта: без демо лентата и без таблицата „Orders sheet“ (поръчките са в листа на корпорацията)
+// с адрес на скрипта: без демо лентата и без таблицата „Orders sheet“ (поръчките са в листа на корпорацията);
+// с менюто My orders
 if (SHOP_URL) {
   ['demo-band', 'sheet', 'nav-sheet'].forEach(function (id) { $(id).classList.add('hidden'); });
+  $('nav-my').classList.remove('hidden');
+  loadKey();
+  takeKeyFromHash();
+  window.addEventListener('hashchange', function () { takeKeyFromHash(); route(); }); // и линк, поставен в същия таб
+  route();
   applyShop();
   loadConfig();
 }
