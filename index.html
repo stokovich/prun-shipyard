@@ -166,9 +166,9 @@ footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
       <div class="body">
         <div class="tbl-box">
           <table>
-            <thead><tr><th scope="col">Ticker</th><th scope="col">Part</th><th scope="col" class="num">Qty</th><th scope="col" class="num">Price</th><th scope="col" class="num">Sum</th></tr></thead>
+            <thead><tr><th scope="col">Ticker</th><th scope="col">Part</th><th scope="col" class="num">Qty</th></tr></thead>
             <tbody id="bom"></tbody>
-            <tfoot><tr><td></td><td>Price per ship</td><td></td><td></td><td class="num" id="bom-total"></td></tr></tfoot>
+            <tfoot><tr><td colspan="3" class="miss" id="bom-total"></td></tr></tfoot>
           </table>
         </div>
       </div>
@@ -202,7 +202,7 @@ footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
         <div class="price-row"><span style="color:var(--label)">Estimated delivery</span><span id="s-lead" style="font-weight:700;color:var(--text-hi)"></span></div>
         <div class="price-row"><span style="color:var(--label)">Price per ship</span><span class="v" id="s-price"></span></div>
         <div class="price-row" style="border-top:0;padding-top:0"><span style="color:var(--label)" id="s-qty-lbl">Total for 1 ship</span><span class="v" style="font-size:16px;color:var(--text-hi)" id="s-total"></span></div>
-        <div class="note">Price = the sum of all parts in the bill of materials. Delivery time comes from our production plan.</div>
+        <div class="note">Price covers all parts in the bill of materials. Delivery time comes from our production plan.</div>
       </div>
     </section>
 
@@ -379,8 +379,10 @@ window.SHIP_DATA = {"source":"APEX blueprint data, harvested 2026-10-18 (798 com
   }
 
   // цената: надценката (%) от Google Sheets на магазина влиза в цената на всяка част, закръглена до цяло NCC;
-  // цената на кораба е сборът брой × цена на частта - клиентът вижда само тях, не CP MOR.
+  // цената на кораба е сборът брой × цена на частта, закръглен НАГОРЕ до PRICE_STEP (10 000 NCC) - клиентът вижда
+  // само нея, не CP MOR и не цените на частите.
   // base (брой × CP MOR) остава за работния файл. Липсва ли цена или надценката не е число от 0 нагоре - грешка, не нула.
+  var PRICE_STEP = 10000;
   function price(bom, prices, markupPct) {
     var m = markupPct === undefined ? 0 : markupPct;
     if (typeof m !== 'number' || !isFinite(m) || m < 0) throw new Error('Invalid markup: ' + markupPct);
@@ -393,6 +395,7 @@ window.SHIP_DATA = {"source":"APEX blueprint data, harvested 2026-10-18 (798 com
       base += p * bom[t];
       total += unit * bom[t];
     });
+    total = Math.ceil(total / PRICE_STEP) * PRICE_STEP; // сборът е цяло число - делението е точно при кратно на 10 000
     return { base: base, markupPct: m, markup: total - base, total: total, lines: lines };
   }
 
@@ -419,7 +422,7 @@ window.SHIP_DATA = {"source":"APEX blueprint data, harvested 2026-10-18 (798 com
   }
   function showKey(k) { return k.slice(0, 4) + '-' + k.slice(4, 8) + '-' + k.slice(8); }
 
-  var api = { compute: compute, price: price, bridgeFor: bridgeFor, parseCp: parseCp,
+  var api = { compute: compute, price: price, PRICE_STEP: PRICE_STEP, bridgeFor: bridgeFor, parseCp: parseCp,
     KEY_ABC: KEY_ABC, KEY_LEN: KEY_LEN, normKey: normKey, showKey: showKey };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ShipCalc = api;
@@ -548,19 +551,13 @@ function render() {
   var chosenTk = {};
   CHOSEN.forEach(function (k) { if (s[k]) chosenTk[s[k]] = 1; });
   var order = Object.keys(r ? r.bom : {}).sort(function (a, b) { return (chosenTk[b] || 0) - (chosenTk[a] || 0); });
-  // цената на частта и сумата са от сметката - с надценката; CP MOR не се показва
-  var line = {};
-  if (q) q.lines.forEach(function (l) { line[l.ticker] = l; });
+  // списъкът с материали - само количествата; цените на частите не се показват (решение 19.10.2026)
   $('bom').innerHTML = order.map(function (t) {
-    var n = r.bom[t], l = line[t];
     var auto = !chosenTk[t];
-    var miss = prices && typeof prices[t] !== 'number';
     return '<tr><td><span class="tk' + (auto ? ' auto' : '') + '">' + t + '</span></td><td>' + esc(NAMES[t] || t) +
-      (auto ? '<span class="auto-tag">auto</span>' : '') + '</td><td class="num">' + fmt(n) + '</td><td class="num">' +
-      (l ? fmt(l.unit) : miss ? '<span class="miss">no price</span>' : '...') + '</td><td class="num">' +
-      (l ? fmt(l.sum) : '') + '</td></tr>';
+      (auto ? '<span class="auto-tag">auto</span>' : '') + '</td><td class="num">' + fmt(r.bom[t]) + '</td></tr>';
   }).join('');
-  $('bom-total').textContent = q ? fmt(q.total) + ' NCC' : (qErr ? qErr : '');
+  $('bom-total').textContent = qErr ? 'Price unavailable: ' + qErr : '';
 
   var c = CARGO[s.cargo];
   $('s-cargo').textContent = fmt(c[0]) + ' t / ' + fmt(c[1]) + ' m³';
