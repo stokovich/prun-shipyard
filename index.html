@@ -321,19 +321,23 @@ window.SHIP_DATA = {"source":"APEX blueprint data, harvested 2026-10-18 (798 com
   function oneOf(list, value, what) {
     if (list.indexOf(value) < 0) throw new Error('Unknown ' + what + ': ' + value);
   }
+  // само собствен ключ на таблицата: `in` пуска и наследените (constructor, toString, __proto__)
+  function own(map, value, what) {
+    if (typeof value !== 'string' || !Object.prototype.hasOwnProperty.call(map, value)) throw new Error('Unknown ' + what + ': ' + value);
+  }
 
   // sel: { engine, stlTank, reactor|null, ftlTank|null, cargo, hull, heat, whipple, radiation, gravity, drones, seats }
   // връща { bom: {тикер: брой}, volume, mass, buildTime } или хвърля грешка - без догадки
   function compute(sel, data) {
     var P = data.parts;
     oneOf(ENGINES, sel.engine, 'STL engine');
-    if (!(sel.stlTank in STL_FUEL)) throw new Error('Unknown STL fuel tank: ' + sel.stlTank);
-    if (!(sel.cargo in STORAGE_M3)) throw new Error('Unknown cargo bay: ' + sel.cargo);
+    own(STL_FUEL, sel.stlTank, 'STL fuel tank');
+    own(STORAGE_M3, sel.cargo, 'cargo bay');
     oneOf(HULLS, sel.hull, 'hull plates');
     var reactor = sel.reactor || null;
     if (reactor) oneOf(REACTORS, reactor, 'FTL reactor');
     var ftlTank = sel.ftlTank || null;
-    if (ftlTank && !(ftlTank in FTL_FUEL)) throw new Error('Unknown FTL fuel tank: ' + ftlTank);
+    if (ftlTank) own(FTL_FUEL, ftlTank, 'FTL fuel tank');
     if (reactor && !ftlTank) throw new Error('An FTL reactor needs an FTL fuel tank');
 
     var bridge = bridgeFor(sel.engine, reactor);
@@ -391,7 +395,31 @@ window.SHIP_DATA = {"source":"APEX blueprint data, harvested 2026-10-18 (798 com
     return { base: base, markupPct: m, markup: markup, total: base + markup, lines: lines };
   }
 
-  var api = { compute: compute, price: price, bridgeFor: bridgeFor };
+  // CP MOR от отговора на gviz (обектът в setResponse(...)): {тикер: цена} или null - едно място за сайта и скрипта
+  function parseCp(resp) {
+    if (!resp || resp.status !== 'ok' || !resp.table) return null;
+    var map = {};
+    (resp.table.rows || []).forEach(function (row) {
+      var t = row && row.c && row.c[0] && row.c[0].v, p = row && row.c && row.c[1] && row.c[1].v;
+      if (typeof t === 'string' && t && typeof p === 'number' && isFinite(p)) map[t] = p;
+    });
+    return Object.keys(map).length ? map : null;
+  }
+
+  // личният ключ на клиента: 12 знака без 0/O, 1/I/L; пази се без тирета, показва се XXXX-XXXX-XXXX
+  var KEY_ABC = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+  var KEY_LEN = 12;
+  var KEY_RE = new RegExp('^[' + KEY_ABC + ']{' + KEY_LEN + '}$');
+  // главни букви, без тирета и интервали; не е низ, твърде дълъг или с чужд знак - null
+  function normKey(v) {
+    if (typeof v !== 'string' || v.length > 40) return null;
+    var k = v.replace(/[\s-]/g, '').toUpperCase();
+    return KEY_RE.test(k) ? k : null;
+  }
+  function showKey(k) { return k.slice(0, 4) + '-' + k.slice(4, 8) + '-' + k.slice(8); }
+
+  var api = { compute: compute, price: price, bridgeFor: bridgeFor, parseCp: parseCp,
+    KEY_ABC: KEY_ABC, KEY_LEN: KEY_LEN, normKey: normKey, showKey: showKey };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ShipCalc = api;
 })(typeof window !== 'undefined' ? window : this);
@@ -419,7 +447,6 @@ var SEND_TIMEOUT_MS = 60000;  // без отговор дотогава - гре
 // личният ключ на клиента (само при SHOP_URL): издава го скриптът при първата поръчка; пази се в браузъра,
 // личният линк #key=... го пренася на друго устройство. Адресът на магазина НЕ се взема от адреса на страницата.
 var KEY_STORE = 'psy.customerKey';
-var KEY_RE = /^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{12}$/;
 var customerKey = null;
 
 var NAMES = {
@@ -561,9 +588,14 @@ function applyShop() {
   $('shop-msg').classList.toggle('hidden', !msg);
 }
 
+// настройките; таймаут или мрежа - още един опит (грешка от листа - не, тя е отговор)
 function loadConfig() {
   var sep = SHOP_URL.indexOf('?') < 0 ? '?' : '&';
-  jsonp(function (cb) { return SHOP_URL + sep + 'action=config&callback=' + cb; }, '__psyCfg').then(function (c) {
+  var ask = function () { return jsonp(function (cb) { return SHOP_URL + sep + 'action=config&callback=' + cb; }, '__psyCfg'); };
+  ask().catch(function (e) {
+    if (e && (e.message === 'timeout' || e.message === 'network')) return ask();
+    throw e;
+  }).then(function (c) {
     if (!c || c.ok !== true) throw new Error((c && c.error) || 'unexpected answer');
     if (typeof c.markupPct !== 'number' || typeof c.leadWeeks !== 'number' || typeof c.maxQty !== 'number') throw new Error('unexpected answer');
     MARKUP_PCT = c.markupPct;
@@ -579,16 +611,22 @@ function loadConfig() {
   });
 }
 
-// през <script> (JSONP), не fetch: така работи и отворено като файл (file://), където Google не дава CORS
+// през <script> (JSONP), не fetch: така работи и отворено като файл (file://), където Google не дава CORS.
+// Закъснял отговор след таймаута вика празна функция (не изтрита - иначе ReferenceError в конзолата).
 var jsonpSeq = 0;
+var JSONP_TIMEOUT_MS = 30000; // студеният старт на Apps Script с IMPORTRANGE минава и 15 s
 function jsonp(srcFor, prefix) {
   return new Promise(function (resolve, reject) {
     var cb = prefix + Date.now() + '_' + (++jsonpSeq);
     var s = document.createElement('script');
-    var timer = setTimeout(function () { done(); reject(new Error('timeout')); }, 15000);
-    function done() { clearTimeout(timer); delete window[cb]; s.remove(); }
-    window[cb] = function (resp) { done(); resolve(resp); };
-    s.onerror = function () { done(); reject(new Error('network')); };
+    var timer = setTimeout(function () { done(true); reject(new Error('timeout')); }, JSONP_TIMEOUT_MS);
+    function done(late) {
+      clearTimeout(timer);
+      if (late) window[cb] = function () { delete window[cb]; }; else delete window[cb];
+      s.remove();
+    }
+    window[cb] = function (resp) { done(false); resolve(resp); };
+    s.onerror = function () { done(false); reject(new Error('network')); };
     s.src = srcFor(cb);
     document.head.appendChild(s);
   });
@@ -600,12 +638,8 @@ function fetchCp() {
 
 function loadPrices() {
   fetchCp().then(function (resp) {
-    if (!resp || resp.status !== 'ok' || !resp.table) throw new Error('unexpected answer');
-    var map = {};
-    (resp.table.rows || []).forEach(function (row) {
-      var t = row.c && row.c[0] && row.c[0].v, p = row.c && row.c[1] && row.c[1].v;
-      if (t != null && typeof p === 'number') map[t] = p;
-    });
+    var map = ShipCalc.parseCp(resp); // общият разбор със скрипта на магазина
+    if (!map) throw new Error('unexpected answer');
     prices = map;
     $('price-src').textContent = 'CP MOR loaded ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' · ' + Object.keys(map).length + ' tickers';
     render();
@@ -721,11 +755,8 @@ window.addEventListener('beforeunload', function (e) {
 
 // ---------------------------------------------------------------- личният ключ и My orders
 
-function normKey(v) {
-  var k = String(v == null ? '' : v).replace(/[\s-]/g, '').toUpperCase();
-  return KEY_RE.test(k) ? k : null;
-}
-function showKey(k) { return k.slice(0, 4) + '-' + k.slice(4, 8) + '-' + k.slice(8); }
+// азбуката и формата на ключа - общи със скрипта на магазина (shipcalc.js)
+var normKey = ShipCalc.normKey, showKey = ShipCalc.showKey;
 function personalLink(k) { return location.href.split('#')[0] + '#key=' + showKey(k); }
 function loadKey() {
   try { customerKey = normKey(localStorage.getItem(KEY_STORE)); } catch (e) { customerKey = null; }
@@ -823,15 +854,24 @@ function route() {
   else if (location.hash === '#order' || location.hash === '#configure') { var el = $(location.hash.slice(1)); if (el) el.scrollIntoView(); }
 }
 
-// #key=XXXX-XXXX-XXXX (личният линк): проверява се, пази се и се маха от адреса; отваря My orders
+// #key=XXXX-XXXX-XXXX (личният линк): проверява се и се маха от адреса; отваря My orders. Ключ, различен от този в
+// браузъра, се приема само след „да“: поръчките оттук нататък отиват към него, а чужд линк би ги показал на друг.
 function takeKeyFromHash() {
   var m = /(?:^|[#&])key=([^&]*)/.exec(location.hash);
   if (!m) return;
   var k = null;
   try { k = normKey(decodeURIComponent(m[1])); } catch (e) { k = null; }
-  if (k) setKey(k);
   try { history.replaceState(null, '', location.pathname + location.search + '#myorders'); } catch (e) { location.hash = 'myorders'; }
-  if (!k) { $('my-keyerr').textContent = 'The link has no valid customer key.'; }
+  if (!k) { $('my-keyerr').textContent = 'The link has no valid customer key.'; return; }
+  if (k === customerKey) return;
+  var text = 'Use customer key ' + showKey(k) + ' in this browser?\n\n' +
+    'Only do this if it is YOUR personal link. Orders you send from this browser will be added to this key, ' +
+    'and anyone who has the link can see them.' +
+    (customerKey ? '\n\nThis replaces your current key ' + showKey(customerKey) + ' - keep your own personal link to get it back.' : '');
+  var yes = false;
+  try { yes = window.confirm(text); } catch (e) { yes = false; }
+  if (yes) setKey(k);
+  else $('my-keyerr').textContent = customerKey ? 'The key from the link was not used - your own key stays.' : 'The key from the link was not used.';
 }
 
 $('my-keyform').addEventListener('submit', function (e) {
