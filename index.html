@@ -144,7 +144,6 @@ footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
     </div>
     <nav aria-label="Main">
       <a href="#configure" class="on">Configure</a>
-      <a href="#order">Order</a>
       <a href="#sheet" id="nav-sheet">Orders sheet</a>
       <a href="#myorders" id="nav-my" class="hidden">My orders</a>
     </nav>
@@ -816,7 +815,7 @@ function route() {
   var my = location.hash === '#myorders';
   document.querySelector('main').classList.toggle('hidden', my);
   $('view-my').classList.toggle('hidden', !my);
-  var on = my ? 'nav-my' : (location.hash === '#order' ? 'order' : 'configure');
+  var on = my ? 'nav-my' : 'configure'; // #order е само котва към формуляра - в менюто е Configure
   document.querySelectorAll('nav a').forEach(function (a) {
     a.classList.toggle('on', my ? a.id === 'nav-my' : a.getAttribute('href') === '#' + on);
   });
