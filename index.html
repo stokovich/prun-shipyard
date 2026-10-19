@@ -7,7 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&family=Noto+Sans+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
-/* Конфигураторът: изборът дава материалите като blueprint в играта (shipcalc.js), цената е по CP MOR на живо. */
+/* Конфигураторът: изборът дава материалите като blueprint в играта (shipcalc.js), цената е по CP MOR на живо + надценката
+   в цената на всяка част; CP MOR не се показва на клиента. */
 :root {
   --bg: #262626; --panel: #222222; --field: #1a1a1a; --row: #23282b;
   --head-bg: rgba(63,162,222,0.15); --head-line: rgba(63,162,222,0.2); --rule: #2b485a;
@@ -131,7 +132,7 @@ footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
 </head>
 <body>
 
-<div class="demo-band" id="demo-band" role="note">DEMO - prices are live CP MOR from our sheet; orders stay in this page only.</div>
+<div class="demo-band" id="demo-band" role="note">DEMO - prices are live from our sheet; orders stay in this page only.</div>
 
 <header>
   <div class="top">
@@ -161,13 +162,13 @@ footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
     </section>
 
     <section class="panel" aria-labelledby="bom-h">
-      <h2 id="bom-h">Bill of materials <small id="price-src">loading CP MOR...</small></h2>
+      <h2 id="bom-h">Bill of materials <small id="price-src">loading prices...</small></h2>
       <div class="body">
         <div class="tbl-box">
           <table>
-            <thead><tr><th scope="col">Ticker</th><th scope="col">Part</th><th scope="col" class="num">Qty</th><th scope="col" class="num">CP MOR</th><th scope="col" class="num">Sum</th></tr></thead>
+            <thead><tr><th scope="col">Ticker</th><th scope="col">Part</th><th scope="col" class="num">Qty</th><th scope="col" class="num">Price</th><th scope="col" class="num">Sum</th></tr></thead>
             <tbody id="bom"></tbody>
-            <tfoot><tr><td></td><td>Base per ship (CP MOR)</td><td></td><td></td><td class="num" id="bom-total"></td></tr></tfoot>
+            <tfoot><tr><td></td><td>Price per ship</td><td></td><td></td><td class="num" id="bom-total"></td></tr></tfoot>
           </table>
         </div>
       </div>
@@ -199,11 +200,9 @@ footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
           <div class="stat"><div class="k">Empty mass</div><div class="v" id="s-mass"></div></div>
         </div>
         <div class="price-row"><span style="color:var(--label)">Estimated delivery</span><span id="s-lead" style="font-weight:700;color:var(--text-hi)"></span></div>
-        <div class="price-row" style="font-size:12px"><span style="color:var(--label)">Base (CP MOR)</span><span id="s-base"></span></div>
-        <div class="price-row" style="border-top:0;padding-top:0;font-size:12px"><span style="color:var(--label)" id="s-mk-lbl">Markup</span><span id="s-mk"></span></div>
         <div class="price-row"><span style="color:var(--label)">Price per ship</span><span class="v" id="s-price"></span></div>
         <div class="price-row" style="border-top:0;padding-top:0"><span style="color:var(--label)" id="s-qty-lbl">Total for 1 ship</span><span class="v" style="font-size:16px;color:var(--text-hi)" id="s-total"></span></div>
-        <div class="note">Price = all parts at our corporate price (CP) on Moria, plus the shop markup. Delivery time comes from our production plan.</div>
+        <div class="note">Price = the sum of all parts in the bill of materials. Delivery time comes from our production plan.</div>
       </div>
     </section>
 
@@ -284,7 +283,7 @@ footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
   </div>
 </div>
 
-<footer class="wrap">PrUn Shipyard · parts list follows the in-game blueprint rules (checked against 893 blueprints) · prices: CP MOR.</footer>
+<footer class="wrap">PrUn Shipyard · parts list follows the in-game blueprint rules (checked against 893 blueprints).</footer>
 
 <script>
 // Генерирано от tools/build_ship_data.py - не се пипа на ръка.
@@ -379,20 +378,22 @@ window.SHIP_DATA = {"source":"APEX blueprint data, harvested 2026-10-18 (798 com
     };
   }
 
-  // цената: база = брой × CP MOR; надценката (%) идва от Google Sheets на магазина.
-  // Липсва ли цена за някой материал или надценката не е число от 0 нагоре - грешка, не нула.
+  // цената: надценката (%) от Google Sheets на магазина влиза в цената на всяка част, закръглена до цяло NCC;
+  // цената на кораба е сборът брой × цена на частта - клиентът вижда само тях, не CP MOR.
+  // base (брой × CP MOR) остава за работния файл. Липсва ли цена или надценката не е число от 0 нагоре - грешка, не нула.
   function price(bom, prices, markupPct) {
     var m = markupPct === undefined ? 0 : markupPct;
     if (typeof m !== 'number' || !isFinite(m) || m < 0) throw new Error('Invalid markup: ' + markupPct);
-    var base = 0, lines = [];
+    var base = 0, total = 0, lines = [];
     Object.keys(bom).forEach(function (t) {
       var p = prices[t];
       if (typeof p !== 'number' || !isFinite(p)) throw new Error('No price for ' + t);
-      lines.push({ ticker: t, amount: bom[t], unit: p, sum: p * bom[t] });
+      var unit = Math.round(p * (100 + m) / 100);
+      lines.push({ ticker: t, amount: bom[t], unit: unit, sum: unit * bom[t] });
       base += p * bom[t];
+      total += unit * bom[t];
     });
-    var markup = base * m / 100;
-    return { base: base, markupPct: m, markup: markup, total: base + markup, lines: lines };
+    return { base: base, markupPct: m, markup: total - base, total: total, lines: lines };
   }
 
   // CP MOR от отговора на gviz (обектът в setResponse(...)): {тикер: цена} или null - едно място за сайта и скрипта
@@ -547,15 +548,19 @@ function render() {
   var chosenTk = {};
   CHOSEN.forEach(function (k) { if (s[k]) chosenTk[s[k]] = 1; });
   var order = Object.keys(r ? r.bom : {}).sort(function (a, b) { return (chosenTk[b] || 0) - (chosenTk[a] || 0); });
+  // цената на частта и сумата са от сметката - с надценката; CP MOR не се показва
+  var line = {};
+  if (q) q.lines.forEach(function (l) { line[l.ticker] = l; });
   $('bom').innerHTML = order.map(function (t) {
-    var n = r.bom[t], p = prices && prices[t];
+    var n = r.bom[t], l = line[t];
     var auto = !chosenTk[t];
+    var miss = prices && typeof prices[t] !== 'number';
     return '<tr><td><span class="tk' + (auto ? ' auto' : '') + '">' + t + '</span></td><td>' + esc(NAMES[t] || t) +
       (auto ? '<span class="auto-tag">auto</span>' : '') + '</td><td class="num">' + fmt(n) + '</td><td class="num">' +
-      (prices ? (typeof p === 'number' ? fmt(p) : '<span class="miss">no price</span>') : '...') + '</td><td class="num">' +
-      (typeof p === 'number' ? fmt(p * n) : '') + '</td></tr>';
+      (l ? fmt(l.unit) : miss ? '<span class="miss">no price</span>' : '...') + '</td><td class="num">' +
+      (l ? fmt(l.sum) : '') + '</td></tr>';
   }).join('');
-  $('bom-total').textContent = q ? fmt(q.base) + ' NCC' : (qErr ? qErr : '');
+  $('bom-total').textContent = q ? fmt(q.total) + ' NCC' : (qErr ? qErr : '');
 
   var c = CARGO[s.cargo];
   $('s-cargo').textContent = fmt(c[0]) + ' t / ' + fmt(c[1]) + ' m³';
@@ -566,9 +571,6 @@ function render() {
   $('s-ff').textContent = r ? (r.ftlFuel ? fmt(r.ftlFuel) + ' FF' : 'none') : '-';
   var loadingShop = shop && shop.state === 'loading';
   $('s-lead').textContent = loadingShop ? 'loading...' : (LEAD_WEEKS === null ? 'confirmed on Discord' : weeks(LEAD_WEEKS));
-  $('s-base').textContent = q ? fmt(q.base) + ' NCC' : '-';
-  $('s-mk-lbl').textContent = MARKUP_PCT === null ? 'Markup' : 'Markup ' + MARKUP_PCT + '%';
-  $('s-mk').textContent = q ? '+' + fmt(q.markup) + ' NCC' : '-';
   var qty = readQty();
   var waiting = (!prices && !priceErr) || loadingShop;
   $('s-price').textContent = q ? fmt(q.total) + ' NCC' : (waiting ? 'loading...' : 'unavailable');
@@ -641,11 +643,11 @@ function loadPrices() {
     var map = ShipCalc.parseCp(resp); // общият разбор със скрипта на магазина
     if (!map) throw new Error('unexpected answer');
     prices = map;
-    $('price-src').textContent = 'CP MOR loaded ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' · ' + Object.keys(map).length + ' tickers';
+    $('price-src').textContent = 'prices updated ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     render();
   }).catch(function (e) {
     priceErr = String(e.message || e);
-    $('price-src').textContent = 'CP MOR could not be loaded (' + priceErr + ') - no price shown';
+    $('price-src').textContent = 'prices could not be loaded (' + priceErr + ') - no price shown';
     render();
   });
 }
