@@ -558,6 +558,7 @@ function render() {
       (auto ? '<span class="auto-tag">auto</span>' : '') + '</td><td class="num">' + fmt(r.bom[t]) + '</td></tr>';
   }).join('');
   $('bom-total').textContent = qErr ? 'Price unavailable: ' + qErr : '';
+  $('bom-total').parentNode.classList.toggle('hidden', !qErr); // без грешка - без празен ред под таблицата
 
   var c = CARGO[s.cargo];
   $('s-cargo').textContent = fmt(c[0]) + ' t / ' + fmt(c[1]) + ' m³';
