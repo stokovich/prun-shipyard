@@ -86,11 +86,8 @@ tfoot td { background: transparent; border-bottom: 0; color: var(--text-hi); fon
 .f label { color: var(--label); font-size: 12px; }
 .f .err { color: var(--bad); font-size: 11px; }
 .f .f-l { color: var(--label); font-size: 12px; }
-/* доставката: Circe по подразбиране; отметката отваря поле за друга локация */
+/* доставката: винаги Circe; друга локация - клиентът я пише в Notes */
 .fixed { height: 40px; padding: 0 10px; display: flex; align-items: center; background: #1f1f1f; border: 1px solid #2f2f2f; color: var(--text-hi); font-weight: 600; }
-.fixed.off { color: var(--text-lo); font-weight: 400; text-decoration: line-through; }
-.f label.chk { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 0; }
-.chk input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .f.bad .field { border-color: var(--bad); }
 .btn { height: 44px; border: 0; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
 .btn-main { background: var(--accent); color: #1a1a1a; }
@@ -222,10 +219,8 @@ footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
         </div>
         <div class="f" id="w-name"><label for="o-name">In-game name</label><input id="o-name" class="field" type="text" maxlength="40"><div class="err"></div></div>
         <div class="f" id="w-dc"><label for="o-dc">Discord username</label><input id="o-dc" class="field" type="text" maxlength="40" placeholder="name or name#1234"><div class="err"></div></div>
-        <div class="f" id="w-to"><span class="f-l" id="o-to-l">Deliver to</span><div class="fixed" id="o-to-def" aria-labelledby="o-to-l"></div>
-          <label class="chk"><input type="checkbox" id="o-to-other" aria-controls="o-to"> Deliver to another location</label>
-          <input id="o-to" class="field hidden" type="text" maxlength="40" placeholder="Planet or station, e.g. Moria Station" aria-label="Other delivery location"><div class="err"></div></div>
-        <div class="f"><label for="o-notes">Notes (optional)</label><textarea id="o-notes" class="field" rows="3" maxlength="300"></textarea></div>
+        <div class="f" id="w-to"><span class="f-l" id="o-to-l">Deliver to</span><div class="fixed" id="o-to-def" aria-labelledby="o-to-l"></div></div>
+        <div class="f"><label for="o-notes">Notes (optional) <small>- another delivery location goes here</small></label><textarea id="o-notes" class="field" rows="3" maxlength="300"></textarea></div>
         <div class="hp" aria-hidden="true"><label for="o-web">Website</label><input id="o-web" type="text" tabindex="-1" autocomplete="off"></div>
         <button type="submit" class="btn btn-main" id="o-send">Send order</button>
         <div id="o-err" class="send-err" role="alert"></div>
@@ -664,17 +659,10 @@ function setErr(id, msg) {
   w.querySelector('.err').textContent = msg || '';
 }
 
-// доставката: Circe по подразбиране; с отметката - написаната локация (празна - грешка, без връщане към Circe)
+// доставката: винаги Circe; друга локация - клиентът я пише в Notes
 var DEFAULT_TO = 'Circe';
 $('o-to-def').textContent = DEFAULT_TO;
-function deliverTo() { return $('o-to-other').checked ? $('o-to').value.trim() : DEFAULT_TO; }
-$('o-to-other').addEventListener('change', function () {
-  var other = this.checked;
-  $('o-to').classList.toggle('hidden', !other);
-  $('o-to-def').classList.toggle('off', other);
-  setErr('w-to', '');
-  if (other) $('o-to').focus();
-});
+function deliverTo() { return DEFAULT_TO; }
 
 function validate() {
   var ok = true;
@@ -683,8 +671,7 @@ function validate() {
   [['w-qty', isNaN(n) || n < 1 || n > MAX_QTY ? 'Quantity must be 1 to ' + MAX_QTY + '.' : ''],
    ['w-cc', /^[A-Z0-9]{0,4}$/.test(cc) ? '' : 'Company code: up to 4 letters or digits.'],
    ['w-name', $('o-name').value.trim() ? '' : 'Required.'],
-   ['w-dc', $('o-dc').value.trim().length >= 2 ? '' : 'Required - we confirm orders on Discord.'],
-   ['w-to', deliverTo() ? '' : 'Write where to deliver, or untick to deliver to ' + DEFAULT_TO + '.']
+   ['w-dc', $('o-dc').value.trim().length >= 2 ? '' : 'Required - we confirm orders on Discord.']
   ].forEach(function (r) { setErr(r[0], r[1]); if (r[1]) ok = false; });
   return ok && !!last;
 }
