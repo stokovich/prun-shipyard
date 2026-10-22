@@ -37,6 +37,13 @@ main { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; paddi
 .col-main { flex: 999 1 600px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .col-side { flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 
+/* видът на поръчката: нов кораб или ъпгрейд (22.10.2026) - като менюто горе */
+.mode { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--head-line); }
+.mode-btn { padding: 10px 16px; background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--link);
+  font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.mode-btn:hover { color: #7cc4ef; }
+.mode-btn[aria-pressed="true"] { color: var(--text-hi); border-bottom-color: var(--accent); cursor: default; }
+
 .panel { background: var(--panel); border: 1px solid var(--head-line); }
 .panel > h2 { margin: 0; padding: 8px 12px; background: var(--head-bg); border-bottom: 1px solid var(--head-line);
   font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-hi);
@@ -156,8 +163,22 @@ footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
 
 <main class="wrap">
   <div class="col-main">
+    <div class="mode" role="group" aria-label="Order type">
+      <button type="button" class="mode-btn" id="mode-ship" aria-pressed="true">New ship</button>
+      <button type="button" class="mode-btn" id="mode-upgrade" aria-pressed="false">Upgrade</button>
+    </div>
+
+    <section id="base" class="panel hidden" aria-labelledby="base-h">
+      <h2 id="base-h"><span>1. Your current ship</span><span class="h2-side"><small>the ship you upgrade from</small><button type="button" class="btn-reset" id="base-reset" title="Back to the starter ship">Starter ship</button></span></h2>
+      <div class="body">
+        <div class="groups" id="base-groups"></div>
+        <div class="note">Most players upgrade the starter ship. Change it only if your ship is different.</div>
+        <div id="base-err" class="errbox hidden" role="alert"></div>
+      </div>
+    </section>
+
     <section id="configure" class="panel" aria-labelledby="cfg-h">
-      <h2 id="cfg-h"><span>1. Configure your ship</span><span class="h2-side"><small>same rules as the in-game blueprint</small><button type="button" class="btn-reset" id="cfg-reset" title="Back to the standard configuration">Reset</button></span></h2>
+      <h2 id="cfg-h"><span id="cfg-t">1. Configure your ship</span><span class="h2-side"><small>same rules as the in-game blueprint</small><button type="button" class="btn-reset" id="cfg-reset" title="Back to the standard configuration">Reset</button></span></h2>
       <div class="body">
         <div class="groups" id="groups"></div>
         <div id="calc-err" class="errbox hidden" role="alert"></div>
@@ -182,8 +203,8 @@ footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
       <div class="body">
         <div class="tbl-box">
           <table>
-            <thead><tr><th scope="col">Time</th><th scope="col">Order</th><th scope="col">Ship</th><th scope="col" class="num">Qty</th><th scope="col">Company</th><th scope="col">Discord</th><th scope="col">Deliver to</th><th scope="col" class="num">Total</th><th scope="col">Status</th></tr></thead>
-            <tbody id="sheet-rows"><tr><td colspan="9" class="empty">No orders yet - send one from the form.</td></tr></tbody>
+            <thead><tr><th scope="col">Time</th><th scope="col">Order</th><th scope="col">Type</th><th scope="col">Ship</th><th scope="col" class="num">Qty</th><th scope="col">Company</th><th scope="col">Discord</th><th scope="col">Deliver to</th><th scope="col" class="num">Total</th><th scope="col">Status</th></tr></thead>
+            <tbody id="sheet-rows"><tr><td colspan="10" class="empty">No orders yet - send one from the form.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -203,7 +224,7 @@ footer { color: var(--text-lo); font-size: 11px; padding-bottom: 24px; }
           <div class="stat"><div class="k">Empty mass</div><div class="v" id="s-mass"></div></div>
         </div>
         <div class="price-row"><span style="color:var(--label)">Estimated delivery</span><span id="s-lead" style="font-weight:700;color:var(--text-hi)"></span></div>
-        <div class="price-row"><span style="color:var(--label)">Price per ship</span><span class="v" id="s-price"></span></div>
+        <div class="price-row"><span style="color:var(--label)" id="s-price-lbl">Price per ship</span><span class="v" id="s-price"></span></div>
         <div class="price-row" style="border-top:0;padding-top:0"><span style="color:var(--label)" id="s-qty-lbl">Total for 1 ship</span><span class="v" style="font-size:16px;color:var(--text-hi)" id="s-total"></span></div>
         <div class="note">Price covers all parts in the bill of materials. Delivery time comes from our production plan.</div>
       </div>
@@ -425,8 +446,57 @@ window.SHIP_DATA = {"source":"APEX blueprint data, harvested 2026-10-18 (798 com
   }
   function showKey(k) { return k.slice(0, 4) + '-' + k.slice(4, 8) + '-' + k.slice(8); }
 
+  // всичко, което compute приема, по ключа на избора - падащите менюта в работния файл на магазина
+  var OPTIONS = { engine: ENGINES, stlTank: Object.keys(STL_FUEL), reactor: REACTORS, ftlTank: Object.keys(FTL_FUEL),
+    cargo: Object.keys(STORAGE_M3), hull: HULLS, heat: PER_PLATE.heat, whipple: PER_PLATE.whipple,
+    radiation: PER_PLATE.radiation, gravity: SINGLE.gravity, drones: SINGLE.drones, seats: SINGLE.seats };
+
+  // ъпгрейд (22.10.2026, сверено с играта 8 от 8 - PLAN.md, „Правилото за ъпгрейда“): нужните материали са по тикер
+  // max(0, желаният - изходният); общите части остават, махнатите не се връщат и не намаляват нищо.
+  // Стартовият кораб е BP-STRT-0000 - compute(STARTER) дава точно неговите материали.
+  var STARTER = { engine: 'ENG', stlTank: 'SSL', reactor: 'RCT', ftlTank: 'SFL', cargo: 'SCB', hull: 'BHP' };
+  function upgrade(originSel, targetSel, data) {
+    var o, t;
+    try { o = compute(originSel, data); } catch (e) { throw new Error('Base ship: ' + e.message); }
+    try { t = compute(targetSel, data); } catch (e) { throw new Error('Upgrade to: ' + e.message); }
+    var bom = {};
+    Object.keys(t.bom).forEach(function (k) {
+      var n = Math.max(0, t.bom[k] - (o.bom[k] || 0));
+      if (n) bom[k] = n;
+    });
+    if (!Object.keys(bom).length) throw new Error('Nothing to upgrade - the base ship already has every part.');
+    return { bom: bom, origin: o, target: t };
+  }
+
+  // изборът като текст за колоната Base ship: тикерите по реда на слотовете, празните пропуснати (ENG SSL RCT SFL SCB BHP)
+  var SEL_KEYS = ['engine', 'stlTank', 'reactor', 'ftlTank', 'cargo', 'hull', 'heat', 'whipple', 'radiation', 'gravity', 'drones', 'seats'];
+  var SLOT_NAMES = { engine: 'STL engine', stlTank: 'STL fuel tank', reactor: 'FTL reactor', ftlTank: 'FTL fuel tank', cargo: 'cargo bay',
+    hull: 'hull plates', heat: 'heat shield', whipple: 'whipple shield', radiation: 'radiation shield', gravity: 'stability', drones: 'repair drones', seats: 'high-G seats' };
+  function selText(sel) {
+    return SEL_KEYS.map(function (k) { return sel && sel[k] ? sel[k] : ''; }).filter(Boolean).join(' ');
+  }
+  // обратното: всеки тикер е в точно един слот (OPTIONS); непознат тикер, два в един слот, липсващ задължителен слот или
+  // FTL резервоар без реактор - грешка. Връща избор с всичките 12 ключа (null за празните).
+  function parseSel(text) {
+    if (typeof text !== 'string' || !text.trim()) throw new Error('No parts given');
+    var slotOf = {};
+    SEL_KEYS.forEach(function (k) { OPTIONS[k].forEach(function (t) { slotOf[t] = k; }); });
+    var sel = {};
+    SEL_KEYS.forEach(function (k) { sel[k] = null; });
+    text.trim().toUpperCase().split(/\s+/).forEach(function (t) {
+      if (!Object.prototype.hasOwnProperty.call(slotOf, t)) throw new Error('Unknown part: ' + t);
+      var k = slotOf[t];
+      if (sel[k]) throw new Error('Two parts for ' + SLOT_NAMES[k] + ': ' + sel[k] + ' and ' + t);
+      sel[k] = t;
+    });
+    ['engine', 'stlTank', 'cargo', 'hull'].forEach(function (k) { if (!sel[k]) throw new Error('No ' + SLOT_NAMES[k]); });
+    if (sel.ftlTank && !sel.reactor) throw new Error('FTL fuel tank without FTL reactor');
+    return sel;
+  }
+
   var api = { compute: compute, price: price, PRICE_STEP: PRICE_STEP, bridgeFor: bridgeFor, parseCp: parseCp,
-    KEY_ABC: KEY_ABC, KEY_LEN: KEY_LEN, normKey: normKey, showKey: showKey };
+    KEY_ABC: KEY_ABC, KEY_LEN: KEY_LEN, normKey: normKey, showKey: showKey, OPTIONS: OPTIONS,
+    STARTER: STARTER, upgrade: upgrade, selText: selText, parseSel: parseSel };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ShipCalc = api;
 })(typeof window !== 'undefined' ? window : this);
@@ -455,6 +525,10 @@ var SEND_TIMEOUT_MS = 60000;  // без отговор дотогава - гре
 // личният линк #key=... го пренася на друго устройство. Адресът на магазина НЕ се взема от адреса на страницата.
 var KEY_STORE = 'psy.customerKey';
 var customerKey = null;
+// видът на поръчката (22.10.2026): 'ship' - нов кораб, 'upgrade' - ъпгрейд от изходния кораб (по подразбиране стартовия);
+// помни се в браузъра
+var MODE_STORE = 'psy.orderType';
+var mode = 'ship';
 
 var NAMES = {
   ENG: 'Standard STL engine', FSE: 'Fuel-saving STL engine', GEN: 'Glass STL engine', AEN: 'Advanced STL engine', HTE: 'Hyperthrust STL engine',
@@ -502,6 +576,7 @@ var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { ret
 var weeks = function (n) { var r = Math.round(n * 10) / 10; return '~' + r + (r === 1 ? ' week' : ' weeks'); };
 
 var sel = {};
+var baseSel = {};   // изходният кораб при ъпгрейд
 var prices = null, priceErr = null;
 var last = null; // последната сметка: {r, quote}
 var orderNo = 0;
@@ -513,20 +588,63 @@ function resetForm() {
   render();
 }
 
-function buildForm() {
-  $('groups').innerHTML = GROUPS.map(function (g) {
+// падащите менюта на слотовете в box: id-тата с prefix, изборът в state, data-<attr> с ключа; подразбирането -
+// от defaults (празно, ако го няма там), без defaults - последната колона в GROUPS
+function buildGroups(box, prefix, state, attr, defaults) {
+  $(box).innerHTML = GROUPS.map(function (g) {
     return '<fieldset><legend>' + esc(g[0]) + '</legend>' + g[1].map(function (s) {
-      sel[s[0]] = s[4];
+      state[s[0]] = defaults ? (defaults[s[0]] || '') : s[4];
       var opts = (s[3] ? '<option value="">' + esc(s[3]) + '</option>' : '') + s[2].map(function (t) {
         return '<option value="' + t + '">' + t + ' - ' + esc(NAMES[t]) + '</option>';
       }).join('');
-      return '<div class="slot"><label for="f-' + s[0] + '">' + esc(s[1]) + '</label><select id="f-' + s[0] + '" class="field" data-slot="' + s[0] + '">' + opts + '</select></div>';
+      return '<div class="slot"><label for="' + prefix + s[0] + '">' + esc(s[1]) + '</label><select id="' + prefix + s[0] + '" class="field" data-' + attr + '="' + s[0] + '">' + opts + '</select></div>';
     }).join('') + '</fieldset>';
   }).join('');
-  document.querySelectorAll('select[data-slot]').forEach(function (el) {
-    el.value = sel[el.dataset.slot];
-    el.addEventListener('change', function () { sel[el.dataset.slot] = el.value; render(); });
+  document.querySelectorAll('select[data-' + attr + ']').forEach(function (el) {
+    var k = el.getAttribute('data-' + attr);
+    el.value = state[k];
+    el.addEventListener('change', function () { state[k] = el.value; render(); });
   });
+}
+
+function buildForm() {
+  buildGroups('groups', 'f-', sel, 'slot');
+  buildGroups('base-groups', 'b-', baseSel, 'base', ShipCalc.STARTER);
+}
+
+// изходният кораб - пак стартовият (BP-STRT-0000)
+function resetBase() {
+  GROUPS.forEach(function (g) { g[1].forEach(function (s) { baseSel[s[0]] = ShipCalc.STARTER[s[0]] || ''; }); });
+  document.querySelectorAll('select[data-base]').forEach(function (el) { el.value = baseSel[el.dataset.base]; });
+  render();
+}
+
+// New ship | Upgrade: при ъпгрейд се вижда изходният кораб, номерата на панелите се местят с едно
+function loadMode() {
+  try { mode = localStorage.getItem(MODE_STORE) === 'upgrade' ? 'upgrade' : 'ship'; } catch (e) { mode = 'ship'; }
+}
+function applyMode() {
+  var up = mode === 'upgrade';
+  $('mode-ship').setAttribute('aria-pressed', String(!up));
+  $('mode-upgrade').setAttribute('aria-pressed', String(up));
+  $('base').classList.toggle('hidden', !up);
+  $('cfg-t').textContent = up ? '2. Upgrade to' : '1. Configure your ship';
+  $('sum-h').textContent = up ? '3. Your ship' : '2. Your ship';
+  $('ord-h').textContent = up ? '4. Place order' : '3. Place order';
+}
+function setMode(m) {
+  mode = m === 'upgrade' ? 'upgrade' : 'ship';
+  try { localStorage.setItem(MODE_STORE, mode); } catch (e) { /* без localStorage */ }
+  applyMode();
+  render();
+}
+
+// изборът за сметката: празното - null; без реактор няма FTL резервоар (изборът му се пази и се връща с реактора)
+function slots(state) {
+  var s = {};
+  CHOSEN.forEach(function (k) { s[k] = state[k] || null; });
+  if (!s.reactor) s.ftlTank = null;
+  return s;
 }
 
 function readQty() {
@@ -538,27 +656,35 @@ function render() {
   // без реактор няма FTL резервоар; изборът му се пази и се връща с реактора
   var ftlSel = $('f-ftlTank');
   ftlSel.disabled = !sel.reactor;
-  var s = {};
-  CHOSEN.forEach(function (k) { s[k] = sel[k] || null; });
-  if (!s.reactor) s.ftlTank = null;
+  $('b-ftlTank').disabled = !baseSel.reactor;
+  var up = mode === 'upgrade';
+  var s = slots(sel), b = up ? slots(baseSel) : null;
 
-  var r = null, err = null;
-  try { r = ShipCalc.compute(s, window.SHIP_DATA); } catch (e) { err = e.message; }
+  // r - желаният кораб (обобщението вдясно); bom - какво се продава: целият кораб или само материалите за ъпгрейда
+  var r = null, err = null, bErr = null, u = null;
+  try { r = ShipCalc.compute(s, window.SHIP_DATA); } catch (e) { err = 'Cannot build this combination: ' + e.message; }
+  if (up) {
+    try { ShipCalc.compute(b, window.SHIP_DATA); } catch (e) { bErr = 'Cannot build this combination: ' + e.message; }
+    if (r && !bErr) { try { u = ShipCalc.upgrade(b, s, window.SHIP_DATA); } catch (e) { err = e.message; } }
+  }
   $('calc-err').classList.toggle('hidden', !err);
-  $('calc-err').textContent = err ? 'Cannot build this combination: ' + err : '';
+  $('calc-err').textContent = err || '';
+  $('base-err').classList.toggle('hidden', !bErr);
+  $('base-err').textContent = bErr || '';
+  var bom = up ? (u ? u.bom : null) : (r ? r.bom : null);
 
   var q = null, qErr = null;
-  if (r && prices && MARKUP_PCT !== null) { try { q = ShipCalc.price(r.bom, prices, MARKUP_PCT); } catch (e) { qErr = e.message; } }
-  last = r && q ? { r: r, q: q, s: s } : null;
+  if (bom && prices && MARKUP_PCT !== null) { try { q = ShipCalc.price(bom, prices, MARKUP_PCT); } catch (e) { qErr = e.message; } }
+  last = bom && q ? { r: r, q: q, s: s, base: b } : null;
 
   var chosenTk = {};
   CHOSEN.forEach(function (k) { if (s[k]) chosenTk[s[k]] = 1; });
-  var order = Object.keys(r ? r.bom : {}).sort(function (a, b) { return (chosenTk[b] || 0) - (chosenTk[a] || 0); });
+  var order = Object.keys(bom || {}).sort(function (a, b) { return (chosenTk[b] || 0) - (chosenTk[a] || 0); });
   // списъкът с материали - само количествата; цените на частите не се показват (решение 19.10.2026)
   $('bom').innerHTML = order.map(function (t) {
     var auto = !chosenTk[t];
     return '<tr><td><span class="tk' + (auto ? ' auto' : '') + '">' + t + '</span></td><td>' + esc(NAMES[t] || t) +
-      (auto ? '<span class="auto-tag">auto</span>' : '') + '</td><td class="num">' + fmt(r.bom[t]) + '</td></tr>';
+      (auto ? '<span class="auto-tag">auto</span>' : '') + '</td><td class="num">' + fmt(bom[t]) + '</td></tr>';
   }).join('');
   $('bom-total').textContent = qErr ? 'Price unavailable: ' + qErr : '';
   $('bom-total').parentNode.classList.toggle('hidden', !qErr); // без грешка - без празен ред под таблицата
@@ -575,7 +701,8 @@ function render() {
   var qty = readQty();
   var waiting = (!prices && !priceErr) || loadingShop;
   $('s-price').textContent = q ? fmt(q.total) + ' NCC' : (waiting ? 'loading...' : 'unavailable');
-  $('s-qty-lbl').textContent = 'Total for ' + qty + (qty === 1 ? ' ship' : ' ships');
+  $('s-price-lbl').textContent = up ? 'Price per upgrade' : 'Price per ship';
+  $('s-qty-lbl').textContent = 'Total for ' + qty + (up ? (qty === 1 ? ' upgrade' : ' upgrades') : (qty === 1 ? ' ship' : ' ships'));
   $('s-total').textContent = q ? fmt(q.total * qty) + ' NCC' : '-';
   $('o-send').disabled = !last || sending || !!(shop && shop.state !== 'ok');
 }
@@ -689,6 +816,7 @@ $('order-form').addEventListener('submit', function (e) {
   e.preventDefault();
   if (!validate()) { var bad = document.querySelector('.f.bad .field'); if (bad) bad.focus(); return; }
   var ship = CHOSEN.map(function (k) { return last.s[k]; }).filter(Boolean).join(' · ');
+  if (last.base) ship = 'upgrade from ' + CHOSEN.map(function (k) { return last.base[k]; }).filter(Boolean).join(' · ') + ' to ' + ship;
   if (SHOP_URL) sendToShop(ship); else keepInPage(ship);
 });
 
@@ -699,8 +827,9 @@ function sendToShop(ship) {
   var payload = {
     sel: last.s, qty: qty, name: $('o-name').value.trim(), cc: $('o-cc').value.trim().toUpperCase(),
     dc: $('o-dc').value.trim(), to: deliverTo(), notes: $('o-notes').value.trim(),
-    hp: $('o-web').value, ms: Date.now() - formOpened
+    hp: $('o-web').value, ms: Date.now() - formOpened, type: last.base ? 'upgrade' : 'ship'
   };
+  if (last.base) payload.base = last.base;   // изходният кораб; материалите на ъпгрейда скриптът смята сам
   if (customerKey) payload.key = showKey(customerKey);
   sending = true;
   $('o-err').textContent = '';
@@ -830,7 +959,7 @@ function loadMyOrders() {
     var money = function (n) { return typeof n === 'number' ? fmt(n) + ' NCC' : '-'; };
     $('my-rows').innerHTML = res.orders.map(function (o) {
       var cls = /^Delivered$/.test(o.status) ? ' st-ok' : o.status === 'Cancelled' ? ' st-off' : '';
-      return '<tr><td data-l="Order">' + esc(o.orderId) + '</td><td data-l="Date">' + esc(myDate(o.time)) + '</td><td data-l="Ship">' +
+      return '<tr><td data-l="Order">' + esc(o.orderId) + (o.type === 'upgrade' ? ' <span class="status">Upgrade</span>' : '') + '</td><td data-l="Date">' + esc(myDate(o.time)) + '</td><td data-l="Ship">' +
         esc(o.ship) + '</td><td class="num" data-l="Qty">' + (typeof o.qty === 'number' ? o.qty : '-') + '</td><td class="num" data-l="Price per ship">' +
         money(o.pricePerShip) + '</td><td class="num" data-l="Total">' + money(o.total) + '</td><td data-l="Status"><span class="status' + cls + '">' +
         esc(o.status) + '</span></td></tr>';
@@ -902,13 +1031,13 @@ function keepInPage(ship) {
   orderNo++;
   var o = {
     time: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
-    id: 'PSY-' + String(orderNo).padStart(4, '0'), ship: ship, qty: qty,
+    id: 'PSY-' + String(orderNo).padStart(4, '0'), type: last.base ? 'Upgrade' : 'Ship', ship: ship, qty: qty,
     cc: $('o-cc').value.trim().toUpperCase(), dc: $('o-dc').value.trim(), to: deliverTo(), total: last.q.total * qty
   };
   var body = $('sheet-rows');
   if (orderNo === 1) body.innerHTML = '';
   var tr = document.createElement('tr');
-  tr.innerHTML = '<td>' + esc(o.time) + '</td><td>' + esc(o.id) + '</td><td>' + esc(o.ship) + '</td><td class="num">' + o.qty +
+  tr.innerHTML = '<td>' + esc(o.time) + '</td><td>' + esc(o.id) + '</td><td>' + esc(o.type) + '</td><td>' + esc(o.ship) + '</td><td class="num">' + o.qty +
     '</td><td>' + esc(o.cc) + '</td><td>' + esc(o.dc) + '</td><td>' + esc(o.to) + '</td><td class="num">' + fmt(o.total) +
     '</td><td><span class="status">New</span></td>';
   body.insertBefore(tr, body.firstChild);
@@ -924,6 +1053,9 @@ $('d-again').addEventListener('click', function () {
 });
 $('o-qty').addEventListener('input', render);
 $('cfg-reset').addEventListener('click', resetForm);
+$('base-reset').addEventListener('click', resetBase);
+$('mode-ship').addEventListener('click', function () { setMode('ship'); });
+$('mode-upgrade').addEventListener('click', function () { setMode('upgrade'); });
 
 // с адрес на скрипта: без демо лентата и без таблицата „Orders sheet“ (поръчките са в листа на корпорацията);
 // с менюто My orders
@@ -938,6 +1070,8 @@ if (SHOP_URL) {
   loadConfig();
 }
 buildForm();
+loadMode();
+applyMode();
 render();
 loadPrices();
 </script>
