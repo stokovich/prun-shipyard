@@ -579,7 +579,7 @@ var CHOSEN = ['engine', 'stlTank', 'reactor', 'ftlTank', 'cargo', 'hull', 'heat'
 
 // готовите конфигурации (23.10.2026): [име, избор]; липсващ слот = празен. Корабите - стандартните на корпорацията
 // (дневникът „Shipbuilding - New“, редове 20-27, и ценоразписът в Discord: FSE/RCT, MSL, LFL, LHP); STL - без реактор.
-// Ъпгрейдите - от стартовия кораб, имената от бележките на CptWaffles (PS-20261023-001..003 в работния файл).
+// Ъпгрейдите - от стартовия кораб (PS-20261023-001..003 в работния файл), имената - както ги поиска CptWaffles в Discord.
 var FTL = { engine: 'FSE', stlTank: 'MSL', reactor: 'RCT', ftlTank: 'LFL', hull: 'LHP' };
 var STL = { engine: 'FSE', stlTank: 'MSL', hull: 'LHP' };
 var withCargo = function (t, cargo) { var o = { cargo: cargo }; Object.keys(t).forEach(function (k) { o[k] = t[k]; }); return o; };
@@ -590,9 +590,9 @@ var TEMPLATES = {
     ['High-load Cargo Bay (FTL)', withCargo(FTL, 'WCB')], ['High-load Cargo Bay (STL)', withCargo(STL, 'WCB')],
     ['Huge Cargo Bay (FTL)', withCargo(FTL, 'HCB')], ['Huge Cargo Bay (STL)', withCargo(STL, 'HCB')]],
   upgrade: [
-    ['Only upgrade cargo bay + LHP', { engine: 'ENG', stlTank: 'SSL', reactor: 'RCT', ftlTank: 'SFL', cargo: 'WCB', hull: 'LHP' }],
-    ['Upgrade cargo bay + LHP + fuel tanks', { engine: 'ENG', stlTank: 'MSL', reactor: 'RCT', ftlTank: 'LFL', cargo: 'WCB', hull: 'LHP' }],
-    ['Upgrade cargo bay + LHP + fuel tanks + engine', { engine: 'FSE', stlTank: 'MSL', reactor: 'RCT', ftlTank: 'LFL', cargo: 'WCB', hull: 'LHP' }]]
+    ['Upgrade to WCB and LHP', { engine: 'ENG', stlTank: 'SSL', reactor: 'RCT', ftlTank: 'SFL', cargo: 'WCB', hull: 'LHP' }],
+    ['Upgrade to WCB and LHP with larger fuel tanks', { engine: 'ENG', stlTank: 'MSL', reactor: 'RCT', ftlTank: 'LFL', cargo: 'WCB', hull: 'LHP' }],
+    ['Upgrade to WCB and LHP with larger fuel tanks and efficient engine', { engine: 'FSE', stlTank: 'MSL', reactor: 'RCT', ftlTank: 'LFL', cargo: 'WCB', hull: 'LHP' }]]
 };
 var TPL_NOTE = {
   ship: 'Pick a standard ship, or set the parts below yourself.',
@@ -660,22 +660,6 @@ function buildTemplates() {
   }).join('');
   $('tpl-note').textContent = TPL_NOTE[mode];
 }
-// цената на шаблона в менюто - същата сметка като в обобщението (ъпгрейдът - от стартовия); без цени - само името
-function templatePrice(t) {
-  if (!prices || MARKUP_PCT === null) return null;
-  try {
-    var s = slots(t);
-    var bom = mode === 'upgrade' ? ShipCalc.upgrade(slots(ShipCalc.STARTER), s, window.SHIP_DATA).bom : ShipCalc.compute(s, window.SHIP_DATA).bom;
-    return ShipCalc.price(bom, prices, MARKUP_PCT).total;
-  } catch (e) { return null; }
-}
-function templateLabels() {
-  var opts = $('tpl-sel').options;
-  TEMPLATES[mode].forEach(function (t, i) {
-    var p = templatePrice(t[1]);
-    opts[i + 1].textContent = t[0] + (p === null ? '' : ' - ' + fmt(p) + ' NCC');
-  });
-}
 function sameSel(a, b) {
   var x = slots(a), y = slots(b);
   return CHOSEN.every(function (k) { return x[k] === y[k]; });
@@ -738,7 +722,6 @@ function render() {
   $('b-ftlTank').disabled = !baseSel.reactor;
   var up = mode === 'upgrade';
   var s = slots(sel), b = up ? slots(baseSel) : null;
-  templateLabels();
   $('tpl-sel').value = templateIndex();
 
   // r - желаният кораб (обобщението вдясно); bom - какво се продава: целият кораб или само материалите за ъпгрейда
