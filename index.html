@@ -833,7 +833,7 @@ function fetchCp() {
   return jsonp(function (cb) { return CP_URL.replace('tqx=out:json', 'tqx=out:json;responseHandler:' + cb); }, '__cpMor');
 }
 
-// цените от снимката: {тикер: число} и кога са взети; null - няма (по-стари от 6 ч или снимката не е правена) - няма цена
+// цените от снимката: {тикер: число} и кога са взети; null - няма (по-стари от 24 ч или снимката не е правена) - няма цена
 function takeShopPrices(map, at, err) {
   var good = map && typeof map === 'object' && Object.keys(map).length > 0 &&
     Object.keys(map).every(function (k) { return typeof map[k] === 'number' && isFinite(map[k]); });
