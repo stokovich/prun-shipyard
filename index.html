@@ -782,7 +782,8 @@ function applyShop() {
   $('shop-msg').classList.toggle('hidden', !msg);
 }
 
-// настройките; таймаут или мрежа - още един опит (грешка от листа - не, тя е отговор)
+// настройките и цените (24.10.2026: цените идват със снимката на магазина, не от Corp Price - сайтът не чака корпорацията);
+// таймаут или мрежа - още един опит (грешка от листа - не, тя е отговор)
 function loadConfig() {
   var sep = SHOP_URL.indexOf('?') < 0 ? '?' : '&';
   var ask = function () { return jsonp(function (cb) { return SHOP_URL + sep + 'action=config&callback=' + cb; }, '__psyCfg'); };
@@ -797,8 +798,10 @@ function loadConfig() {
     MAX_QTY = c.maxQty;
     $('o-qty').max = MAX_QTY;
     shop = { state: c.open ? 'ok' : 'closed', message: c.message || '' };
+    takeShopPrices(c.prices, c.pricesAt);
   }).catch(function (e) {
     shop = { state: 'error', message: String(e.message || e) };
+    takeShopPrices(null, null, String(e.message || e));
   }).then(function () {
     applyShop();
     render();
@@ -830,6 +833,23 @@ function fetchCp() {
   return jsonp(function (cb) { return CP_URL.replace('tqx=out:json', 'tqx=out:json;responseHandler:' + cb); }, '__cpMor');
 }
 
+// цените от снимката: {тикер: число} и кога са взети; null - няма (по-стари от 6 ч или снимката не е правена) - няма цена
+function takeShopPrices(map, at, err) {
+  var good = map && typeof map === 'object' && Object.keys(map).length > 0 &&
+    Object.keys(map).every(function (k) { return typeof map[k] === 'number' && isFinite(map[k]); });
+  var when = at ? new Date(at) : null;
+  if (good && when && !isNaN(when.getTime())) {
+    prices = map;
+    priceErr = null;
+    $('price-src').textContent = 'prices as of ' + when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  } else {
+    prices = null;
+    priceErr = err || 'not available right now';
+    $('price-src').textContent = 'prices ' + (err ? 'could not be loaded (' + err + ')' : 'are not available right now') + ' - no price shown';
+  }
+}
+
+// демото (без SHOP_URL): цените направо от Corp Price
 function loadPrices() {
   fetchCp().then(function (resp) {
     var map = ShipCalc.parseCp(resp); // общият разбор със скрипта на магазина
@@ -1138,7 +1158,7 @@ buildForm();
 loadMode();
 applyMode();
 render();
-loadPrices();
+if (!SHOP_URL) loadPrices();
 </script>
 </body>
 </html>
