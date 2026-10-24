@@ -811,7 +811,7 @@ function loadConfig() {
 // през <script> (JSONP), не fetch: така работи и отворено като файл (file://), където Google не дава CORS.
 // Закъснял отговор след таймаута вика празна функция (не изтрита - иначе ReferenceError в конзолата).
 var jsonpSeq = 0;
-var JSONP_TIMEOUT_MS = 30000; // студеният старт на Apps Script с IMPORTRANGE минава и 15 s
+var JSONP_TIMEOUT_MS = 30000; // студеният старт на Apps Script минава и 15 s
 function jsonp(srcFor, prefix) {
   return new Promise(function (resolve, reject) {
     var cb = prefix + Date.now() + '_' + (++jsonpSeq);
