@@ -583,12 +583,14 @@ var CHOSEN = ['engine', 'stlTank', 'reactor', 'ftlTank', 'cargo', 'hull', 'heat'
 var FTL = { engine: 'FSE', stlTank: 'MSL', reactor: 'RCT', ftlTank: 'LFL', hull: 'LHP' };
 var STL = { engine: 'FSE', stlTank: 'MSL', hull: 'LHP' };
 var withCargo = function (t, cargo) { var o = { cargo: cargo }; Object.keys(t).forEach(function (k) { o[k] = t[k]; }); return o; };
+// HCB - със STS (24.10.2026, Стокич; и в дневника корабите с HCB носят цената на STS)
+var withHcb = function (t) { var o = withCargo(t, 'HCB'); o.gravity = 'STS'; return o; };
 var TEMPLATES = {
   ship: [
     ['Large Cargo Bay (FTL)', withCargo(FTL, 'LCB')], ['Large Cargo Bay (STL)', withCargo(STL, 'LCB')],
     ['High-volume Cargo Bay (FTL)', withCargo(FTL, 'VCB')], ['High-volume Cargo Bay (STL)', withCargo(STL, 'VCB')],
     ['High-load Cargo Bay (FTL)', withCargo(FTL, 'WCB')], ['High-load Cargo Bay (STL)', withCargo(STL, 'WCB')],
-    ['Huge Cargo Bay (FTL)', withCargo(FTL, 'HCB')], ['Huge Cargo Bay (STL)', withCargo(STL, 'HCB')]],
+    ['Huge Cargo Bay (FTL)', withHcb(FTL)], ['Huge Cargo Bay (STL)', withHcb(STL)]],
   upgrade: [
     ['Upgrade to WCB and LHP', { engine: 'ENG', stlTank: 'SSL', reactor: 'RCT', ftlTank: 'SFL', cargo: 'WCB', hull: 'LHP' }],
     ['Upgrade to WCB and LHP with larger fuel tanks', { engine: 'ENG', stlTank: 'MSL', reactor: 'RCT', ftlTank: 'LFL', cargo: 'WCB', hull: 'LHP' }],
@@ -610,12 +612,24 @@ var baseSel = {};   // изходният кораб при ъпгрейд
 var prices = null, priceErr = null;
 var last = null; // последната сметка: {r, quote}
 var orderNo = 0;
+var autoSts = false;   // STS е вдигнат сам от HCB (не на ръка) - слиза, ако HCB се смени
 
 // стандартният избор (последната колона в GROUPS)
 function resetForm() {
   GROUPS.forEach(function (g) { g[1].forEach(function (s) { sel[s[0]] = s[4]; }); });
   document.querySelectorAll('select[data-slot]').forEach(function (el) { el.value = sel[el.dataset.slot]; });
+  autoSts = false;
   render();
+}
+
+// HCB вдига STS по подразбиране; махне ли се на ръка - остава махнат. Смени ли се HCB, вдигнатият сам STS слиза,
+// сложеният на ръка остава (24.10.2026)
+function cargoSts(k) {
+  if (k === 'gravity') { autoSts = false; return; }
+  if (k !== 'cargo') return;
+  if (sel.cargo === 'HCB' && !sel.gravity) { sel.gravity = 'STS'; autoSts = true; }
+  else if (sel.cargo !== 'HCB' && autoSts) { sel.gravity = ''; autoSts = false; }
+  $('f-gravity').value = sel.gravity;
 }
 
 // падащите менюта на слотовете в box: id-тата с prefix, изборът в state, data-<attr> с ключа; подразбирането -
@@ -633,7 +647,7 @@ function buildGroups(box, prefix, state, attr, defaults) {
   document.querySelectorAll('select[data-' + attr + ']').forEach(function (el) {
     var k = el.getAttribute('data-' + attr);
     el.value = state[k];
-    el.addEventListener('change', function () { state[k] = el.value; render(); });
+    el.addEventListener('change', function () { state[k] = el.value; if (state === sel) cargoSts(k); render(); });
   });
 }
 
@@ -677,6 +691,7 @@ function applyTemplate() {
     CHOSEN.forEach(function (k) { if (k !== 'ftlTank' || t[1].reactor) sel[k] = t[1][k] || ''; });
     document.querySelectorAll('select[data-slot]').forEach(function (el) { el.value = sel[el.dataset.slot]; });
     if (mode === 'upgrade') setBaseStarter();
+    autoSts = sel.cargo === 'HCB' && sel.gravity === 'STS';
   }
   render();
 }
