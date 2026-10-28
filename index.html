@@ -460,6 +460,17 @@ window.SHIP_DATA = {"source":"APEX blueprint data, harvested 2026-10-18 (798 com
     cargo: Object.keys(STORAGE_M3), hull: HULLS, heat: PER_PLATE.heat, whipple: PER_PLATE.whipple,
     radiation: PER_PLATE.radiation, gravity: SINGLE.gravity, drones: SINGLE.drones, seats: SINGLE.seats };
 
+  // всеки тикер, който compute може да сложи в материалите: избираемите части + мост, каюти, плочи, SSC, FFC, емитери.
+  // Към сайта отиват цените само на тях, не целият Corp Price (28.10.2026, Стокич)
+  var PRICED = Object.keys(OPTIONS).reduce(function (a, k) { return a.concat(OPTIONS[k]); }, [])
+    .concat(['BRS', 'BR1', 'BR2', 'SSC', 'FFC', 'SFE', 'MFE', 'LFE'], CREW.map(function (c) { return c[1]; }));
+  function shipPrices(map) {
+    if (!map) return null;
+    var o = {};
+    PRICED.forEach(function (t) { if (Object.prototype.hasOwnProperty.call(map, t)) o[t] = map[t]; });
+    return o;
+  }
+
   // ъпгрейд (22.10.2026, сверено с играта 8 от 8 - PLAN.md, „Правилото за ъпгрейда“): нужните материали са по тикер
   // max(0, желаният - изходният); общите части остават, махнатите не се връщат и не намаляват нищо.
   // Стартовият кораб е BP-STRT-0000 - compute(STARTER) дава точно неговите материали.
@@ -505,15 +516,13 @@ window.SHIP_DATA = {"source":"APEX blueprint data, harvested 2026-10-18 (798 com
 
   var api = { compute: compute, price: price, PRICE_STEP: PRICE_STEP, bridgeFor: bridgeFor, parseCp: parseCp,
     KEY_ABC: KEY_ABC, KEY_LEN: KEY_LEN, normKey: normKey, showKey: showKey, OPTIONS: OPTIONS,
-    STARTER: STARTER, upgrade: upgrade, selText: selText, parseSel: parseSel };
+    STARTER: STARTER, upgrade: upgrade, selText: selText, parseSel: parseSel, PRICED: PRICED, shipPrices: shipPrices };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ShipCalc = api;
 })(typeof window !== 'undefined' ? window : this);
 
 </script>
 <script>
-// CP MOR: таблицата на Corp Price, лист MOR (тикер, цена) - същата, която чете apex-corp-price.user.js
-var CP_URL = 'https://docs.google.com/spreadsheets/d/1bK512U_uLjW-BIqCiP4U3X7Q4eTDZhopm9rnUtp4-nI/gviz/tq?tqx=out:json&sheet=MOR&tq=' + encodeURIComponent('SELECT A,B');
 // адресът на web app-а от Apps Script (apps-script\README.md, „Адресът в сайта“), напр. 'https://script.google.com/macros/s/.../exec'.
 // Празен - демо: надценката и срокът идват от адреса на страницата (#markup=5&lead=4.1), поръчката остава в страницата.
 var SHOP_URL = 'https://script.google.com/macros/s/AKfycbxwwMD0dGO_OHtmfMEd3XtnmLW_rUQd5weFKPAMMRJH2w9_x2jKsJy5fjkj1Pok0pL1cA/exec';
@@ -853,10 +862,6 @@ function jsonp(srcFor, prefix) {
   });
 }
 
-function fetchCp() {
-  return jsonp(function (cb) { return CP_URL.replace('tqx=out:json', 'tqx=out:json;responseHandler:' + cb); }, '__cpMor');
-}
-
 // цените от снимката: {тикер: число} и кога са взети; null - няма (по-стари от 24 ч или снимката не е правена) - няма цена
 function takeShopPrices(map, at, err) {
   var good = map && typeof map === 'object' && Object.keys(map).length > 0 &&
@@ -871,21 +876,6 @@ function takeShopPrices(map, at, err) {
     priceErr = err || 'not available right now';
     $('price-src').textContent = 'prices ' + (err ? 'could not be loaded (' + err + ')' : 'are not available right now') + ' - no price shown';
   }
-}
-
-// демото (без SHOP_URL): цените направо от Corp Price
-function loadPrices() {
-  fetchCp().then(function (resp) {
-    var map = ShipCalc.parseCp(resp); // общият разбор със скрипта на магазина
-    if (!map) throw new Error('unexpected answer');
-    prices = map;
-    $('price-src').textContent = 'prices updated ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    render();
-  }).catch(function (e) {
-    priceErr = String(e.message || e);
-    $('price-src').textContent = 'prices could not be loaded (' + priceErr + ') - no price shown';
-    render();
-  });
 }
 
 function setErr(id, msg) {
@@ -1182,7 +1172,8 @@ buildForm();
 loadMode();
 applyMode();
 render();
-if (!SHOP_URL) loadPrices();
+// демото (без SHOP_URL) е без цени: адресът на Corp Price не стои в страницата (28.10.2026)
+if (!SHOP_URL) { priceErr = 'demo - no prices'; $('price-src').textContent = priceErr; render(); }
 </script>
 </body>
 </html>
